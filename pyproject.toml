@@ -2,6 +2,7 @@
 name = "django-ansible-inventory"
 version = "0.1.0"
 description = ""
+authors = ["Bjorn Meyer <bjorn.github@proton.me>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
