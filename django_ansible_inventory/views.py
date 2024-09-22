@@ -1,5 +1,10 @@
+from rest_framework import generics
+from .serializers import HostSerializer
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from typing import Dict, Any
 from django.http import JsonResponse
-from .models import NetworkAddress
+from .models import NetworkAddress, Host
 
 
 def get_available_ips(request):
@@ -27,3 +32,39 @@ def get_available_ips(request):
         return JsonResponse({"available_ips": ip_data})
 
     return JsonResponse({"available_ips": []})
+
+
+class HostListView(generics.ListAPIView):
+    queryset = Host.objects.filter(enabled=True)
+    serializer_class = HostSerializer
+
+
+class AnsibleInventoryView(APIView):
+    def get(self, request, format=None):
+        tag = request.query_params.get("tag", None)
+        if tag:
+            hosts = Host.objects.filter(enabled=True, groups__tags__name=tag).distinct()
+        else:
+            hosts = Host.objects.filter(enabled=True)
+
+        # Define the type of inventory to guide the linter
+        inventory: Dict[str, Dict[str, Any]] = {"_meta": {"hostvars": {}}}
+
+        for host in hosts:
+            for group in host.groups.all():
+                group_name = group.name
+                group_vars = group.group_vars
+
+                if group_name not in inventory:
+                    inventory[group_name] = {
+                        "hosts": [],
+                        "vars": group_vars,
+                    }
+
+                # Ensure Pylance knows this is a list
+                inventory[group_name]["hosts"].append(host.name)
+
+                # Add host variables to _meta
+                inventory["_meta"]["hostvars"][host.name] = host.host_vars
+
+        return Response(inventory)
