@@ -1,0 +1,33 @@
+/* Ensure the search input stays at the top */
+.select2-selection__rendered {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+/* Place the search input at the top */
+.select2-search.select2-search--inline {
+    order: -1;
+}
+
+/* Customize the select2 dropdown and selected items area */
+.select2-selection__choice {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    margin-bottom: 2px;
+    white-space: normal;
+}
+
+.select2-selection--multiple {
+    max-height: 150px;
+    max-width: 200px;
+    overflow-y: auto;
+    white-space: normal;
+}
+
+.select2-dropdown--below {
+    width: 200px !important;
+}
