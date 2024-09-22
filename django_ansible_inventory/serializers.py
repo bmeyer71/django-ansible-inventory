@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from django_ansible_inventory.models import AnsibleGroup, Host
+from .models import AnsibleGroup, Host
 
 
 class AnsibleGroupSerializer(serializers.ModelSerializer):
