@@ -478,7 +478,11 @@ class Host(models.Model):
         null=True,
         blank=True,
     )
-    short_description = models.CharField(max_length=255)
+    short_description = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+    )
     host_type = models.ForeignKey(
         HostType,
         on_delete=models.CASCADE,
