@@ -1,6 +1,13 @@
 from django.db import models
+from django.contrib.auth import get_user_model
+from django.utils import timezone
+from datetime import timedelta
+
 from .fields import LowerCharField, UpperCharField, CommonFields
 from netaddr import IPNetwork
+
+
+User = get_user_model()
 
 
 def get_default_hosttype():
@@ -157,8 +164,22 @@ class NetworkLabel(CommonFields):
 
 class NetworkAddress(models.Model):
     ip_address = models.GenericIPAddressField(unique=True)
-    network_label = models.ForeignKey(NetworkLabel, on_delete=models.CASCADE)
+    network_label = models.ForeignKey(
+        NetworkLabel,
+        on_delete=models.CASCADE,
+    )
     is_assigned = models.BooleanField(default=False)
+    is_reserved = models.BooleanField(default=False)
+    reserved_by = models.ForeignKey(
+        User,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+    )
+    reservation_timestamp = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
 
     class Meta:
         verbose_name = "Network Address"
@@ -166,6 +187,11 @@ class NetworkAddress(models.Model):
 
     def __str__(self):
         return self.ip_address
+
+    def is_reservation_expired(self):
+        if self.reservation_timestamp:
+            return timezone.now() > self.reservation_timestamp + timedelta(minutes=10)
+        return False
 
 
 class HostType(CommonFields):

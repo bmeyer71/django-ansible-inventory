@@ -4,6 +4,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from typing import Dict, Any
 from django.http import JsonResponse
+from django.utils import timezone
+from datetime import timedelta
 from .models import NetworkAddress, Host
 
 
@@ -14,9 +16,21 @@ def get_available_ips(request):
     )  # Pass the selected IP when editing
 
     if vlan_id:
+        # Clean up expired reservations
+        NetworkAddress.objects.filter(
+            is_reserved=True,
+            reservation_timestamp__lt=timezone.now() - timedelta(minutes=10),
+        ).update(
+            is_reserved=False,
+            reserved_by=None,
+            reservation_timestamp=None,
+        )
+
         available_ips = NetworkAddress.objects.filter(
-            network_label_id=vlan_id, is_assigned=False
-        )[:5]
+            network_label_id=vlan_id,
+            is_assigned=False,
+            is_reserved=False,
+        ).order_by("pk")[:5]
         ip_data = [{"id": ip.id, "ip_address": ip.ip_address} for ip in available_ips]
 
         # If the selected IP is assigned, add it manually

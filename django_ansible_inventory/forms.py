@@ -1,6 +1,10 @@
 from django import forms
-from .models import Host, NetworkAddress
 from netaddr import IPAddress as NetIPAddress, IPNetwork
+from django.utils import timezone
+from datetime import timedelta
+from django.db.models import Q
+
+from .models import Host, NetworkAddress
 
 
 class HostAdminForm(forms.ModelForm):
@@ -17,20 +21,46 @@ class HostAdminForm(forms.ModelForm):
         model = Host
         fields = "__all__"
         widgets = {
-            "short_description": forms.Textarea(
-                attrs={"rows": 4, "cols": 40}
-            ),  # Adjust rows/cols as needed
+            "short_description": forms.Textarea(attrs={"rows": 4, "cols": 40}),
         }
 
     def __init__(self, *args, **kwargs):
+        self.current_user = kwargs.pop("current_user", None)
         super().__init__(*args, **kwargs)
 
-        # Populate the IP address dropdown based on VLAN selection
-        if "vlan" in self.data:
+        user = self.current_user
+
+        # Clean up expired reservations
+        NetworkAddress.objects.filter(
+            is_reserved=True,
+            reservation_timestamp__lt=timezone.now() - timedelta(minutes=10),
+        ).update(is_reserved=False, reserved_by=None, reservation_timestamp=None)
+
+        # Get VLAN ID from form data or instance
+        if "vlan" in self.data and self.data.get("vlan"):
             vlan_id = self.data.get("vlan")
-            self.fields["ip_address"].queryset = NetworkAddress.objects.filter(
+        elif self.instance.pk and self.instance.vlan:
+            vlan_id = self.instance.vlan.id
+        else:
+            vlan_id = None
+
+        # Set up the queryset for ip_address field
+        if vlan_id:
+            # Build the base queryset
+            queryset = NetworkAddress.objects.filter(
                 network_label_id=vlan_id, is_assigned=False
+            ).filter(Q(is_reserved=False) | Q(reserved_by=user))
+
+            # Include the selected IP in the queryset
+            selected_ip_id = self.data.get("ip_address") or self.initial.get(
+                "ip_address"
             )
+            if selected_ip_id:
+                queryset = queryset | NetworkAddress.objects.filter(pk=selected_ip_id)
+
+            self.fields["ip_address"].queryset = queryset.distinct()
+        else:
+            self.fields["ip_address"].queryset = NetworkAddress.objects.none()
 
     def clean(self):
         cleaned_data = super().clean()
@@ -79,3 +109,30 @@ class HostAdminForm(forms.ModelForm):
                 )
 
         return cleaned_data
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        ip_address = self.cleaned_data.get("ip_address")
+
+        # If editing an existing instance, unassign the old IP
+        if instance.pk:
+            old_instance = Host.objects.get(pk=instance.pk)
+            old_ip = old_instance.ip_address
+            if old_ip and old_ip != ip_address:
+                # Unassign the old IP
+                old_ip.is_assigned = False
+                old_ip.save()
+
+        if ip_address:
+            # Assign the new IP
+            ip_address.is_assigned = True
+            ip_address.is_reserved = False
+            ip_address.reserved_by = None
+            ip_address.reservation_timestamp = None
+            ip_address.save()
+
+        if commit:
+            instance.save()
+            self.save_m2m()
+
+        return instance

@@ -1,4 +1,8 @@
 from django.contrib import admin
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.utils import timezone
+
 from .models import (
     Host,
     AnsibleGroup,
@@ -78,24 +82,100 @@ class HostAdmin(admin.ModelAdmin):
         js = (
             "admin/js/ip_filter.js",
             "admin/js/toggle_ip.js",
+            "admin/js/ip_reserve.js",
         )
         css = {"all": ("admin/css/custom_select2.css",)}
-
-    def save_model(self, request, obj, form, change):
-        if change:
-            old_ip = Host.objects.get(pk=obj.pk).ip_address
-            if old_ip and old_ip != obj.ip_address:
-                old_ip.is_assigned = False
-                old_ip.save()
-        if obj.ip_address:
-            obj.ip_address.is_assigned = True
-            obj.ip_address.save()
-        super().save_model(request, obj, form, change)
 
     def formfield_for_manytomany(self, db_field, request, **kwargs):
         if db_field.name == "groups":
             kwargs["help_text"] = "Use Ctrl + Click to select multiple groups"
         return super().formfield_for_manytomany(db_field, request, **kwargs)
+
+    def get_urls(self):
+        from django.urls import path
+
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "reserve-ip/",
+                self.admin_site.admin_view(self.reserve_ip),
+                name="reserve_ip",
+            ),
+            path(
+                "release-ip/",
+                self.admin_site.admin_view(self.release_ip),
+                name="release_ip",
+            ),
+        ]
+        return custom_urls + urls
+
+    # Remove @csrf_exempt to enable CSRF protection
+    def reserve_ip(self, request):
+        if request.method == "POST":
+            ip_id = request.POST.get("ip_id")
+            user = request.user
+
+            try:
+                ip = NetworkAddress.objects.get(pk=ip_id)
+
+                # Check if the IP is already assigned or reserved by someone else
+                if ip.is_assigned:
+                    return JsonResponse(
+                        {"success": False, "message": "IP is already assigned."}
+                    )
+                if (
+                    ip.is_reserved
+                    and ip.reserved_by != user
+                    and not ip.is_reservation_expired()
+                ):
+                    return JsonResponse(
+                        {"success": False, "message": "IP is reserved by another user."}
+                    )
+
+                # Reserve the IP
+                ip.is_reserved = True
+                ip.reserved_by = user
+                ip.reservation_timestamp = timezone.now()
+                ip.save()
+
+                return JsonResponse({"success": True})
+
+            except NetworkAddress.DoesNotExist:
+                return JsonResponse({"success": False, "message": "IP does not exist."})
+        else:
+            return JsonResponse(
+                {"success": False, "message": "Invalid request method."}
+            )
+
+    @csrf_exempt  # Exempt from CSRF checks for release_ip
+    def release_ip(self, request):
+        if request.method == "POST":
+            ip_id = request.POST.get("ip_id")
+            user = request.user if request.user.is_authenticated else None
+
+            try:
+                ip = NetworkAddress.objects.get(pk=ip_id)
+
+                # Check if the IP is reserved by the current user or if the reservation has expired
+                if ip.reserved_by == user or ip.is_reservation_expired():
+                    ip.is_reserved = False
+                    ip.reserved_by = None
+                    ip.reservation_timestamp = None
+                    ip.save()
+                    return JsonResponse({"success": True})
+                else:
+                    return JsonResponse(
+                        {
+                            "success": False,
+                            "message": "You do not have permission to release this IP.",
+                        }
+                    )
+            except NetworkAddress.DoesNotExist:
+                return JsonResponse({"success": False, "message": "IP does not exist."})
+        else:
+            return JsonResponse(
+                {"success": False, "message": "Invalid request method."}
+            )
 
 
 @admin.register(AnsibleGroupTag)
@@ -133,8 +213,9 @@ class NetworkAddressAdmin(admin.ModelAdmin):
         "is_assigned",
     )
     list_filter = [
-        "is_assigned",
         "network_label",
+        "is_assigned",
+        "is_reserved",
     ]
     search_fields = ["ip_address"]
 
