@@ -76,7 +76,12 @@ class AnsibleInventoryView(APIView):
                     }
 
                 # Ensure Pylance knows this is a list
-                inventory[group_name]["hosts"].append(host.name)
+                inventory[group_name]["hosts"].append(
+                    {
+                        "name": host.name,
+                        "vars": host.host_vars,
+                    }
+                )
 
                 # Add host variables to _meta
                 inventory["_meta"]["hostvars"][host.name] = host.host_vars
