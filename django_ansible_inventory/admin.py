@@ -44,12 +44,15 @@ class HostAdmin(admin.ModelAdmin):
         "name",
         "ip_address",
         "enabled",
+        "host_type",
     )
     filter_horizontal = ("groups",)
     list_filter = [
         "enabled",
-        "groups",
         "host_type",
+        "environment",
+        "host_class",
+        "purpose",
     ]
     ordering = ["name"]
     fields = [
