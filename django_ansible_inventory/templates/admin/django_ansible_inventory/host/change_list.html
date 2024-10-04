@@ -1,0 +1,11 @@
+{% extends "admin/change_list.html" %}
+
+{% block search %}
+    <div class="search-bar">
+        <form method="GET">
+            <input type="text" name="q" placeholder="Enter Search Criteria" value="{{ query }}" />
+            <button type="submit" class="button">Search</button>
+        </form>
+        <p class="help-text">You can search by entering the hostname, Ansible group, Network label or IP.</p>
+    </div>
+{% endblock %}
