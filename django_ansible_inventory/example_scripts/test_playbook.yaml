@@ -1,0 +1,10 @@
+---
+- name: Test Inventory
+  hosts: all
+  gather_facts: false
+
+  tasks:
+    - name: Display all variables for the host
+      ansible.builtin.debug:
+        # msg: "All variables for {{ inventory_hostname }}: {{ hostvars[inventory_hostname] }}"
+        msg: "Test PB for {{ inventory_hostname }}"
