@@ -5,7 +5,7 @@ import argparse
 import json
 from typing import Dict, List, Any
 
-API_BASE_URL = "http://127.0.0.1:8000/api"
+API_BASE_URL = "http://jupiter.home.arpa/api"
 
 
 def fetch_hosts() -> List[Dict[str, Any]]:
